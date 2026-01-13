@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeniorDev - Programmer AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-code"></i>
+                    <h1>SeniorDev</h1>
+                </div>
+                <p class="subtitle">Programmer AI Assistant</p>
+            </div>
+
+            <div class="sidebar-content">
+                <button class="btn-new-chat" onclick="clearChat()">
+                    <i class="fas fa-plus"></i> New Chat
+                </button>
+
+                <div class="info-box">
+                    <h3><i class="fas fa-info-circle"></i> About</h3>
+                    <p>This AI answers questions using only your PDF documents, with a programmer's perspective.</p>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="status" id="status">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span id="status-text">Checking system...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="main">
+            <!-- Chat Header -->
+            <div class="chat-header">
+                <div class="header-content">
+                    <h2><i class="fas fa-comments"></i> Chat</h2>
+                    <div class="header-actions">
+                        <button class="btn-icon" onclick="clearChat()" title="Clear Chat">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Messages Container -->
+            <div class="messages" id="messages">
+                <!-- Welcome message -->
+                <div class="message ai">
+                    <div class="avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="content">
+                        <div class="name">SeniorDev</div>
+                        <div class="text">
+                            Hello! I'm SeniorDev, your programmer AI assistant. I'll answer questions using your PDF documents as reference.
+                            <br><br>
+                            Ask me anything about your documents, and I'll respond with a programmer's perspective!
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <textarea
+                        id="message-input"
+                        placeholder="Ask me anything about your PDFs..."
+                        rows="1"
+                        oninput="autoResize(this)"
+                        onkeydown="handleKeyDown(event)"
+                    ></textarea>
+                    <button id="send-button" onclick="sendMessage()">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div class="input-footer">
+                    <small>Press Enter to send, Shift+Enter for new line</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isLoading = false;
+
+        // Check system status on load
+        window.onload = function() {
+            checkStatus();
+        };
+
+        function checkStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    const dot = document.getElementById('status-dot');
+                    const text = document.getElementById('status-text');
+
+                    if (data.loaded) {
+                        dot.style.backgroundColor = '#10a37f';
+                        text.textContent = 'System Ready';
+                    } else {
+                        dot.style.backgroundColor = '#ff6b6b';
+                        text.textContent = 'System Not Loaded';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking status:', error);
+                });
+        }
+
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        }
+
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+
+            if (!message || isLoading) return;
+
+            // Add user message to chat
+            addMessage(message, 'user');
+
+            // Clear input
+            input.value = '';
+            input.style.height = 'auto';
+
+            // Show loading indicator
+            showLoading();
+            isLoading = true;
+
+            // Send to server
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                addMessage(data.response, 'ai');
+                isLoading = false;
+                scrollToBottom();
+            })
+            .catch(error => {
+                hideLoading();
+                addMessage('Error: Could not get response from server.', 'ai');
+                isLoading = false;
+                console.error('Error:', error);
+                scrollToBottom();
+            });
+        }
+
+        function addMessage(text, sender) {
+            const messagesDiv = document.getElementById('messages');
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+
+            if (sender === 'user') {
+                messageDiv.innerHTML = `
+                    <div class="avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="content">
+                        <div class="name">You</div>
+                        <div class="text">${escapeHtml(text)}</div>
+                    </div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="content">
+                        <div class="name">SeniorDev</div>
+                        <div class="text">${formatResponse(text)}</div>
+                    </div>
+                `;
+            }
+
+            messagesDiv.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function formatResponse(text) {
+            // Convert line breaks to <br>
+            let formatted = escapeHtml(text).replace(/\n/g, '<br>');
+
+            // Format code blocks (simple detection)
+            formatted = formatted.replace(/```([\s\S]*?)```/g, '<div class="code-block">$1</div>');
+            formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+            return formatted;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showLoading() {
+            const messagesDiv = document.getElementById('messages');
+
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message ai loading';
+            loadingDiv.id = 'loading-message';
+
+            loadingDiv.innerHTML = `
+                <div class="avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="content">
+                    <div class="name">SeniorDev</div>
+                    <div class="text">
+                        <div class="typing-indicator">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            messagesDiv.appendChild(loadingDiv);
+            scrollToBottom();
+        }
+
+        function hideLoading() {
+            const loadingMsg = document.getElementById('loading-message');
+            if (loadingMsg) {
+                loadingMsg.remove();
+            }
+        }
+
+        function clearChat() {
+            const messagesDiv = document.getElementById('messages');
+
+            // Keep only the welcome message
+            const welcomeMsg = messagesDiv.querySelector('.message.ai:first-child');
+            messagesDiv.innerHTML = '';
+            if (welcomeMsg) {
+                messagesDiv.appendChild(welcomeMsg);
+            }
+
+            // Clear server-side history
+            fetch('/api/clear', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Chat cleared:', data);
+            });
+
+            // Add a new welcome message if none exists
+            if (!welcomeMsg) {
+                addMessage("Chat cleared! I'm ready to answer your questions about the PDFs.", 'ai');
+            }
+
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html>
